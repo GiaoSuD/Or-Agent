@@ -1,4 +1,4 @@
-# OR_Agent_TTS
+# OR_Agent
 
 Operations Research Agent with Text-to-Solution capabilities. This project uses large language models (LLMs) to solve operations research optimization problems by generating and executing Gurobi code.
 
@@ -23,30 +23,18 @@ Operations Research Agent with Text-to-Solution capabilities. This project uses 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/OR_Agent_TTS.git
-cd OR_Agent_TTS
+git clone https://github.com/jasMie410/OR_Agent.git
+cd OR_Agent
 ```
 
-### 2. Create a virtual environment
 
-```bash
-# Using venv
-python -m venv venv
-
-# Activate the virtual environment
-# On Windows
-venv\Scripts\activate
-# On macOS/Linux
-source venv/bin/activate
-```
-
-### 3. Install dependencies
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Set up environment variables
+### 3. Set up environment variables
 
 Copy the example environment file and edit it with your API keys:
 
@@ -54,7 +42,7 @@ Copy the example environment file and edit it with your API keys:
 cp .env.example .env
 ```
 
-Edit the `.env` file with your API keys:
+Make sure to set up the `.env` file with your API keys:
 
 ```
 # OpenAI API configuration
@@ -84,7 +72,7 @@ You can specify different models:
 
 ```bash
 # Using OpenAI models
-python or_llm_eval.py --agent --model gpt-4
+python or_llm_eval.py --agent --model o3-mini
 
 # Using Claude models
 python or_llm_eval.py --agent --model claude-3-opus-20240229
@@ -109,39 +97,18 @@ For a more interactive experience with real-time output:
 python or_llm_show.py
 ```
 
-## Running the MCP Server
-
-The Model Context Protocol (MCP) server allows you to expose the OR agent functionality as an API that can be used by other applications.
-
-### 1. Install MCP dependencies
-
-```bash
-pip install fastmcp
-```
-
-### 2. Run the MCP server
-
-```bash
-python mcp_server.py
-```
-
-This will start the MCP server on the default port (8000). You can access the API documentation at `http://localhost:8000/docs`.
-
 ### 3. Using the MCP API
 
 You can now make requests to the MCP server:
 
-```python
-import requests
+```bash
+python mcp_server_clean.py
+```
 
-response = requests.post(
-    "http://localhost:8000/tools/get_operation_research_problem_answer",
-    json={
-        "user_question": "A company produces two products, A and B. Each product requires processing on two machines. Product A requires 2 hours on machine 1 and 1 hour on machine 2. Product B requires 1 hour on machine 1 and 3 hours on machine 2. Machine 1 is available for 40 hours per week, and machine 2 is available for 60 hours per week. The profit is $3 per unit of product A and $4 per unit of product B. How many units of each product should be produced to maximize profit?"
-    }
-)
+Open another terminal then run:
 
-print(response.json())
+```bash
+python app.py
 ```
 
 ### 4. Integrating with LLM Agents
@@ -158,7 +125,8 @@ For instructions on using Ollama with this codebase, see [OLLAMA_USAGE.md](OLLAM
 - `or_llm_eval_async.py`: Asynchronous version for batch processing
 - `or_llm_show.py`: Interactive visualization version
 - `utils.py`: Utility functions
-- `mcp_server.py`: MCP server implementation
+- `mcp_server_clean.py`: MCP server implementation
+- `app.py` : UI
 - `data/`: Directory containing datasets and processing scripts
 
 ## Troubleshooting
@@ -170,10 +138,6 @@ If you encounter Gurobi license issues, make sure you have a valid license and i
 ### API Connection Issues
 
 If you're having trouble connecting to the LLM APIs, check your API keys and internet connection. For Ollama, make sure the Ollama service is running.
-
-### MCP Server Issues
-
-If the MCP server fails to start, check that you have the required dependencies installed and that the port is not already in use.
 
 ## Contributing
 
