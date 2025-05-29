@@ -11,17 +11,21 @@ from aiohttp import web
 import io
 from contextlib import redirect_stdout
 from or_llm_eval import or_llm_agent
+from dotenv import load_dotenv
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+load_dotenv()
 # Server configuration
 SERVER_NAME = "or_llm_agent"
 HOST = "127.0.0.1"
 PORT = 5050
 
-DEFAULT_MODEL = "your_Default_model"
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL")
+
 
 # Function to solve OR problems
 def get_operation_research_problem_answer(user_question, model_name=DEFAULT_MODEL, max_attempts=3):
