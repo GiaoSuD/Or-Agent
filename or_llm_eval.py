@@ -175,81 +175,136 @@ def or_llm_agent(user_question, model_name="gpt-4", max_attempts=3):
     """
     # Initialize conversation history
     messages = [
-        {"role": "system", "content": (
-            "You are an operations research expert. Based on the optimization problem provided by the user, construct a mathematical model that effectively models the original problem using mathematical (linear programming) expressions.\n\n"
-            "Follow these steps:\n"
-            "1. Identify the decision variables and clearly define what each variable represents\n"
-            "2. Formulate the objective function (min or max)\n"
-            "3. List all constraints with clear mathematical expressions\n"
-            "4. Specify any bounds or restrictions on variables\n\n"
-            "Focus on obtaining a correct and complete mathematical model. This model will be used later to guide the generation of Gurobi code."
-        )},
-        {"role": "user", "content": user_question}
+        {
+            "role": "system",
+            "content": (
+                "You are an operations research expert. Based on the optimization problem "
+                "provided by the user, construct a mathematical model that effectively "
+                "models the original problem using mathematical (linear programming) expressions.\n\n"
+                "Follow these steps:\n"
+                "1. Identify the decision variables and clearly define what each variable represents\n"
+                "2. Formulate the objective function (min or max)\n"
+                "3. List all constraints with clear mathematical expressions\n"
+                "4. Specify any bounds or restrictions on variables\n\n"
+                "Focus on obtaining a correct mathematical model expression without too "
+                "much concern for explanations. This model will be used later to guide "
+                "the generation of Gurobi code, and this step is mainly used to generate "
+                "effective linear scale expressions."
+            )
+        },
+        {
+            "role": "user",
+            "content": user_question
+        }
     ]
 
-    # 1. Generate mathematical model
+    # 1. Generate mathematical model - MATH MODEL
     math_model = query_llm(messages, model_name)
     print("[Mathematical Model]:\n", math_model)
 
+
     
-    # 2. Validate mathematical model
-    messages.append({"role": "assistant", "content": math_model})
-    messages.append({"role": "user", "content": (
-        "Please check if the above mathematical model matches the problem description. If there are errors, make corrections; if there are no errors, check if it can be optimized."
-        "In any case, please output the final mathematical model again."
-    )})
+    # 2. Validate mathematical model - MATH MODEL
+    messages.append(
+        {
+        "role": "assistant",
+        "content": math_model
+        }
+    )
+
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                "Please verify whether the above mathematical model correctly and completely "
+                "represents the original problem stated earlier in natural language.\n\n"
+                "Specifically:\n"
+                "1. **Check correctness** of the objective function, constraints, variables, and sets.\n"
+                "2. **Identify and fix any errors, omissions, or misinterpretations** from the original problem.\n"
+                "3. If the model is already correct, check if it can be **simplified or written more concisely**.\n"
+                "4. Finally, output the **corrected or optimized mathematical model** in full.\n\n"
+                "Be precise, and think like a mathematical model auditor or a reviewer."
+            )
+        }
+    )
+
 
     validate_math_model = query_llm(messages, model_name)
     print("[Validated Mathematical Model]:\n", validate_math_model)
     
 
-    # Generating python code + fixing using gurobi 
-    messages.append({"role": "assistant", "content": validate_math_model})
-    
-    # ------------------------------
-    messages.append({"role": "user", "content": (
-        "Based on the above mathematical model, write complete and reliable Python code using Gurobi to solve this operations research optimization problem.\n\n"
-        "Your code must follow this structure:\n"
-        "1. Import necessary libraries (gurobipy, numpy, etc.)\n"
-        "2. Create a model instance\n"
-        "3. Define and add variables with appropriate bounds\n"
-        "4. Set the objective function\n"
-        "5. Add all constraints\n"
-        "6. Optimize the model\n"
-        "7. Extract and print the results, including the optimal objective value\n"
-        "8. Handle potential infeasibility or unboundedness\n\n"
-        "Output in the format ```python\n{code}\n```, without code explanations."
-    )})
-    # copy msg; solve; add the laset gurobi code 
-    is_solve_success, result, messages = generate_or_code_solver(messages, model_name,max_attempts)
-    print(f'Stage result: {is_solve_success}, {result}')
+    # 3. Generating Python code + fixing using Gurobi - CODE GENERATION
+    messages.append(
+        {
+            "role": "assistant",
+            "content": validate_math_model
+        }
+    )
+
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                "Based on the above mathematical model, write complete and reliable Python code using Gurobi to solve "
+                "this operations research optimization problem.\n\n"
+                "Your code must follow this structure:\n"
+                "1. Import necessary libraries (gurobipy, numpy, etc.)\n"
+                "2. Create a model instance\n"
+                "3. Define and add variables with appropriate bounds\n"
+                "4. Set the objective function\n"
+                "5. Add all constraints\n"
+                "6. Optimize the model\n"
+                "7. Extract and print the results, including the optimal objective value\n"
+                "8. Handle potential infeasibility or unboundedness\n\n"
+                "Output in the format ```python\n{code}\n```, without code explanations."
+            )
+        }
+    )
+
+    # Copy msg; solve; add the laset gurobi code 
+    is_solve_success, result, messages = generate_or_code_solver(messages, model_name, max_attempts)
+    print(f"[Stage result: {is_solve_success}, {result}]")
+
+    # Check if solve successfully
     if is_solve_success:
         if not is_number_string(result):
             print('!![No available solution warning]!!')
-            # no solution 
-            messages.append({"role": "user", "content": (
-                "The current model resulted in *no feasible solution*. This indicates one of these issues:\n"
-                "1. Contradictory constraints making the problem infeasible\n"
-                "2. Incorrect variable bounds\n"
-                "3. Errors in constraint formulation\n\n"
-                "Please carefully analyze the mathematical model and Gurobi code. Add diagnostic code to identify which constraints are causing infeasibility. Then fix the issues and provide the complete corrected code.\n\n"
-                "Output in the format ```python\n{code}\n```, without code explanations."
-            )})
+
+            # No solution
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "The current model resulted in *no feasible solution*. This indicates one of these issues:\n"
+                        "1. Contradictory constraints making the problem infeasible\n"
+                        "2. Incorrect variable bounds\n"
+                        "3. Errors in constraint formulation\n\n"
+                        "Please carefully analyze the mathematical model and Gurobi code. Add diagnostic code to identify "
+                        "which constraints are causing infeasibility. Then fix the issues and provide the complete corrected code.\n\n"
+                        "Output in the format ```python\n{code}\n```, without code explanations."
+                    )
+                }
+            )
             is_solve_success, result, messages = generate_or_code_solver(messages, model_name, max_attempts=1)
-    else:
-        print('!![Max attempt debug error warning]!!')
-        messages.append({"role": "user", "content": (
-                "The model code still reports errors after multiple debugging attempts. Here are common issues to address:\n"
-                "1. Check for syntax errors or undefined variables\n"
-                "2. Ensure all constraints use proper Gurobi syntax (e.g., model.addConstr() not just expressions)\n"
-                "3. Verify that all mathematical operations are valid (e.g., no division by zero)\n"
-                "4. Confirm that variable types match their usage (continuous vs. integer vs. binary)\n\n"
-                "Please completely rebuild the Gurobi Python code with careful attention to these details.\n"
-                "Output in the format ```python\n{code}\n```, without code explanations."
-            )})
-        is_solve_success, result, messages = generate_or_code_solver(messages, model_name, max_attempts=2)
-    
-    return is_solve_success, result
+        else:
+            print('!![Max attempt debug error warning]!!')
+
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "The model code still reports errors after multiple debugging attempts. Here are common issues to address:\n"
+                        "1. Check for syntax errors or undefined variables\n"
+                        "2. Ensure all constraints use proper Gurobi syntax (e.g., model.addConstr() not just expressions)\n"
+                        "3. Verify that all mathematical operations are valid (e.g., no division by zero)\n"
+                        "4. Confirm that variable types match their usage (continuous vs. integer vs. binary)\n\n"
+                        "Please completely rebuild the Gurobi Python code with careful attention to these details.\n"
+                        "Output in the format ```python\n{code}\n```, without code explanations."
+                    )
+                }
+            )
+            is_solve_success, result, messages = generate_or_code_solver(messages, model_name, max_attempts=2)
+
 
 def gpt_code_agent_simple(user_question, model_name="gpt-4", max_attempts=3):
     """
@@ -265,12 +320,20 @@ def gpt_code_agent_simple(user_question, model_name="gpt-4", max_attempts=3):
     """
     # Initialize conversation history
     messages = [
-        {"role": "system", "content": (
-            "You are an operations research expert. Based on the optimization problem provided by the user, construct a mathematical model and write complete, reliable Python code using Gurobi to solve the operations research optimization problem."
-            "The code should include necessary model construction, variable definitions, constraint additions, objective function settings, as well as solving and result output."
+        {
+            "role": "system", 
+            "content": (
+                "You are an operations research expert. Based on the optimization problem provided by the user, construct a mathematical "
+                "model and write complete, reliable Python code using Gurobi to solve the operations research optimization problem."
+                "The code should include necessary model construction, variable definitions, constraint additions, objective function "
+                "settings, as well as solving and result output."
                 "Output in the format ```python\n{code}\n```, without code explanations."
-        )},
-        {"role": "user", "content": user_question}
+            )
+        },
+        {
+            "role": "user",
+            "content": user_question
+        }
     ]
 
     # copy msg; solve; add the laset gurobi code
