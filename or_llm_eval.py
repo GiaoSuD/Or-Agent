@@ -1,6 +1,7 @@
 import openai
 import anthropic
 import requests
+from google import genai
 from dotenv import load_dotenv
 import os
 import re
@@ -22,15 +23,12 @@ from utils import (
 # Load environment variables from .env file
 load_dotenv()
 
-# OpenAI API setup
-openai_api_data = dict(
-    api_key = os.getenv("OPENAI_API_KEY"),
-    base_url = os.getenv("OPENAI_API_BASE")
-)  
-
 # Anthropic API setup
 anthropic_api_data = dict(
     api_key = os.getenv("CLAUDE_API_KEY"),
+)
+anthropic_client = anthropic.Anthropic(
+    api_key=anthropic_api_data['api_key']
 )
 
 # Ollama API setup
@@ -38,16 +36,23 @@ ollama_api_data = dict(
     base_url = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
 )
 
-# Initialize clients
+# OpenAI API setup
+openai_api_data = dict(
+    api_key = os.getenv("OPENAI_API_KEY"),
+    base_url = os.getenv("OPENAI_API_BASE")
+)  
 openai_client = openai.OpenAI(
     api_key=openai_api_data['api_key'],
     base_url=openai_api_data['base_url'] if openai_api_data['base_url'] else None
 )
 
-anthropic_client = anthropic.Anthropic(
-    api_key=anthropic_api_data['api_key']
+# Gemini API setup
+gemini_api_data = dict(
+    api_key = os.getenv("GEMINI_API_KEY"),
 )
-
+gemini_client = genai.client(
+    api_key = gemini_api_data['api_key']
+)
 # No client initialization needed for Ollama, we'll use requests directly
 
 def query_llm(messages, model_name="gpt-4", temperature=0.2):
@@ -120,6 +125,51 @@ def query_llm(messages, model_name="gpt-4", temperature=0.2):
             }]
         )
         return response.content[0].text
+    
+    # Check if model is gemini:
+    elif model_name.lower().startswith('gemini'):
+        gemini_messages = []
+            
+        for message in messages:
+            if message["role"] == "system":
+                # Gemini doesn't have explicit system role, prepend to first user message
+                continue
+            elif message["role"] == "user":
+                gemini_messages.append({
+                    "role": "user",
+                    "parts": [message["content"]]
+                })
+            elif message["role"] == "assistant":
+                gemini_messages.append({
+                    "role": "model",
+                    "parts": [message["content"]]
+                })
+            
+        # Add system message to the first user message if exists
+        system_message = next((m["content"] for m in messages if m["role"] == "system"), "")
+        if system_message:
+            # Find the first user message and prepend system message to it
+            for msg in gemini_messages:
+                if msg["role"] == "user":
+                    msg["parts"][0] = f"{system_message}\n\n{msg['parts'][0]}"
+                    break
+            else:
+                # If no user message found, create one with just the system message
+                gemini_messages.insert(0, {
+                    "role": "user", 
+                    "parts": [system_message]
+                })
+            
+        # Generate response
+        response = gemini_client.generate_content(
+            gemini_messages,
+            generation_config=genai.types.GenerationConfig(
+                temperature=temperature,
+                max_output_tokens=8192,
+            )
+        )  
+        return response.text
+            
     else:
         # Use OpenAI API
         response = openai_client.chat.completions.create(

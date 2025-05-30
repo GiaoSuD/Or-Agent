@@ -24,8 +24,11 @@ SERVER_NAME = "or_llm_agent"
 HOST = "127.0.0.1"
 PORT = 5050
 
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL")
+default_model = dict(
+    model = os.getenv("DEFAULT_MODEL"),
+)
 
+DEFAULT_MODEL = default_model['model']
 
 # Function to solve OR problems
 def get_operation_research_problem_answer(user_question, model_name=DEFAULT_MODEL, max_attempts=3):
