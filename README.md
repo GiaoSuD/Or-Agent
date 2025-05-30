@@ -16,7 +16,7 @@ Operations Research Agent with Text-to-Solution capabilities. This project uses 
 
 - Python 3.8 or higher
 - Gurobi Optimizer (with a valid license)
-- Access to LLM APIs (OpenAI, Claude) or Ollama for local models
+- Access to LLM APIs (OpenAI, Claude, Gemini) or Ollama for local models
 
 ## Installation
 
@@ -46,14 +46,21 @@ Make sure to set up the `.env` file with your API keys:
 
 ```
 # OpenAI API configuration
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_API_BASE=https://api.openai.com/v1
+OPENAI_API_KEY="your_openai_api_key"
+OPENAI_API_BASE="your_openai_api_base"
+
+# Gemini API configuration
+GEMINI_API_KEY="your_gemini_api_key"
 
 # Anthropic API configuration
-CLAUDE_API_KEY=your_claude_api_key_here
+CLAUDE_API_KEY="your_claude_api_key"
 
 # Ollama API configuration (optional, for local models)
 OLLAMA_API_BASE=http://localhost:11434
+
+# Default model 
+DEFAULT_MODEL="your_default_model"
+
 ```
 
 ## Usage
@@ -63,7 +70,7 @@ OLLAMA_API_BASE=http://localhost:11434
 Run the agent with a specific model:
 
 ```bash
-python or_llm_eval.py --agent --model o3-mini
+python eval.py --agent --model o3-mini
 ```
 
 ### Using Different Models
@@ -72,29 +79,16 @@ You can specify different models:
 
 ```bash
 # Using OpenAI models
-python or_llm_eval.py --agent --model o3-mini
+python eval.py --agent --model o3-mini
 
 # Using Claude models
-python or_llm_eval.py --agent --model claude-3-opus-20240229
+python eval.py --agent --model claude-3-opus-20240229
+
+# Using Gemini models
+python eval.py --agent --model gemini-2.0-flash
 
 # Using Ollama models (local)
-python or_llm_eval.py --agent --model ollama:llama2
-```
-
-### Asynchronous Processing
-
-For batch processing multiple problems:
-
-```bash
-python or_llm_eval_async.py --agent --model o3-mini
-```
-
-### Interactive Visualization
-
-For a more interactive experience with real-time output:
-
-```bash
-python or_llm_show.py
+python eval.py --agent --model ollama:llama2
 ```
 
 ### 3. Using the MCP API
@@ -102,7 +96,7 @@ python or_llm_show.py
 You can now make requests to the MCP server:
 
 ```bash
-python mcp_server_clean.py
+python mcp_server.py
 ```
 
 Open another terminal then run:
@@ -121,11 +115,9 @@ For instructions on using Ollama with this codebase, see [OLLAMA_USAGE.md](OLLAM
 
 ## Project Structure
 
-- `or_llm_eval.py`: Main script for running the OR agent
-- `or_llm_eval_async.py`: Asynchronous version for batch processing
-- `or_llm_show.py`: Interactive visualization version
-- `utils.py`: Utility functions
-- `mcp_server_clean.py`: MCP server implementation
+- `eval.py`: Script for running validate the OR agent
+- `utils.py`: Utility functions (methods)
+- `mcp_server.py`: MCP server implementation
 - `app.py` : UI
 - `data/`: Directory containing datasets and processing scripts
 

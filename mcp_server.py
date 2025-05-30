@@ -5,20 +5,19 @@ A simplified HTTP server with JSON-RPC support for the Operations Research Agent
 """
 
 import logging
-import sys
 import os
 from aiohttp import web
 import io
 from contextlib import redirect_stdout
-from or_llm_eval import or_llm_agent
+from src.modules.utils import or_llm_agent
 from dotenv import load_dotenv
+load_dotenv()
 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-load_dotenv()
 # Server configuration
 SERVER_NAME = "or_llm_agent"
 HOST = "127.0.0.1"
@@ -27,8 +26,7 @@ PORT = 5050
 default_model = dict(
     model = os.getenv("DEFAULT_MODEL"),
 )
-
-DEFAULT_MODEL = default_model['model']
+DEFAULT_MODEL = default_model["model"]
 
 # Function to solve OR problems
 def get_operation_research_problem_answer(user_question, model_name=DEFAULT_MODEL, max_attempts=3):
@@ -39,14 +37,28 @@ def get_operation_research_problem_answer(user_question, model_name=DEFAULT_MODE
         # Try to solve the problem with the real agent
         buffer = io.StringIO()
         with redirect_stdout(buffer):
-            is_solve_success, result = or_llm_agent(user_question, model_name, max_attempts)
+            result = or_llm_agent(user_question, model_name, max_attempts)
         output = buffer.getvalue()
+        
+        # Kiểm tra kết quả trước khi unpack
+        if result is None:
+            logger.error("or_llm_agent returned None")
+            return "Error: The OR agent failed to process your question. Please check if your question describes a clear optimization problem."
+        
+        # Kiểm tra xem result có phải tuple không
+        if isinstance(result, tuple) and len(result) == 2:
+            is_solve_success, solution = result
+            logger.info(f"OR problem processed successfully: {is_solve_success}")
+        else:
+            # Nếu không phải tuple, coi như thành công và dùng result trực tiếp
+            is_solve_success = True
+            logger.info("OR problem processed (non-tuple result)")
         
         if not output.strip():
             return "No output generated from the OR agent. Please check your question format."
         
-        logger.info(f"OR problem processed successfully: {is_solve_success}")
         return output
+        
     except Exception as e:
         logger.error(f"Error in get_operation_research_problem_answer: {str(e)}")
         
@@ -55,9 +67,11 @@ def get_operation_research_problem_answer(user_question, model_name=DEFAULT_MODE
         if "API key" in error_message:
             return "Error: Invalid API key. Please check your .env file and ensure the API key is correctly set."
         elif "model_not_found" in error_message or "does not exist" in error_message:
-            return f"Error: Model '{model_name}' not found or you don't have access to it. Try using a different model like 'gpt-3.5-turbo'."
+            return f"Error: Model '{model_name}' not found or you don't have access to it. Try using a different model."
         elif "quota" in error_message or "exceeded" in error_message:
             return "Error: API rate limit exceeded or insufficient quota. Please check your billing details or try again later."
+        elif "cannot unpack" in error_message:
+            return "Error: The OR agent returned an unexpected result format. Please check your or_llm_agent implementation."
         else:
             return f"Error processing the optimization problem: {error_message}"
 

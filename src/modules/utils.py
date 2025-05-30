@@ -1,7 +1,7 @@
 import openai
 import anthropic
 import requests
-from google import genai
+import google.generativeai as genai
 from dotenv import load_dotenv
 import os
 import re
@@ -9,16 +9,7 @@ import subprocess
 import sys
 import tempfile
 import copy
-import json
-import argparse
 from itertools import zip_longest
-from utils import (
-    is_number_string,
-    convert_to_number,
-    extract_best_objective,
-    extract_and_execute_python_code,
-    eval_model_result
-)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -28,7 +19,7 @@ anthropic_api_data = dict(
     api_key = os.getenv("CLAUDE_API_KEY"),
 )
 anthropic_client = anthropic.Anthropic(
-    api_key=anthropic_api_data['api_key']
+    api_key=anthropic_api_data["api_key"]
 )
 
 # Ollama API setup
@@ -42,18 +33,152 @@ openai_api_data = dict(
     base_url = os.getenv("OPENAI_API_BASE")
 )  
 openai_client = openai.OpenAI(
-    api_key=openai_api_data['api_key'],
-    base_url=openai_api_data['base_url'] if openai_api_data['base_url'] else None
+    api_key=openai_api_data["api_key"],
+    base_url=openai_api_data["base_url"] if openai_api_data["base_url"] else None
 )
 
 # Gemini API setup
 gemini_api_data = dict(
     api_key = os.getenv("GEMINI_API_KEY"),
 )
-gemini_client = genai.client(
-    api_key = gemini_api_data['api_key']
+genai.configure(
+    api_key=gemini_api_data["api_key"]
 )
-# No client initialization needed for Ollama, we'll use requests directly
+
+
+def is_number_string(s):
+    """
+    Determine if a string is a numeric string, including integers and decimals.
+
+    Args:
+    s: The string to be checked.
+
+    Returns:
+    True if the string is a numeric string, otherwise False.
+    """
+    pattern = r"^[-+]?\d+(\.\d+)?$"  # Regular expression to match integers or decimals
+    return re.match(pattern, s) is not None
+
+def convert_to_number(s):
+    """
+    Convert a string to a number (integer or float).
+
+    Args:
+        s: The string to be converted.
+
+    Returns:
+        int or float: Returns int if the string represents an integer, float if it represents a decimal.
+        Returns None if conversion fails.
+    """
+    try:
+        # Try to convert to integer
+        if s.isdigit() or (s.startswith('-') and s[1:].isdigit()):
+            return int(s)
+        # Try to convert to float
+        num = float(s)
+        return num
+    except (ValueError, TypeError):
+        return None
+
+def extract_best_objective(output_text):
+    """
+    Extract Best objective or Optimal objective value from Gurobi output.
+    
+    Args:
+        output_text: Gurobi output text
+    
+    Returns:
+        float or None: Optimal solution value, returns None if not found
+    """
+    # First check if model is infeasible
+    if "Model is infeasible" in output_text:
+        return None
+    
+    # Try to find Best objective
+    match = re.search(r'Best objective\s+([\d.e+-]+)', output_text)
+    if not match:
+        # If not found, try to find Optimal objective
+        match = re.search(r'Optimal objective\s+([\d.e+-]+)', output_text)
+    
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+    
+    return None
+
+def extract_and_execute_python_code(text_content):
+    """
+    Extract Python code blocks from text and execute them.
+
+    Args:
+        text_content: Text content containing code blocks.
+
+    Returns:
+        bool: True if execution was successful, False otherwise
+        str: Error message if execution failed, best objective if successful
+    """
+    python_code_blocks = re.findall(r'```python\s*([\s\S]*?)```', text_content)
+
+    if not python_code_blocks:
+        print("No Python code blocks found.")
+        return False, "No Python code blocks found"
+
+    for code_block in python_code_blocks:
+        code_block = code_block.strip()
+        if not code_block:
+            print("Found an empty Python code block, skipped.")
+            continue
+
+        print("Found Python code block, starting execution...")
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp_file:
+                tmp_file.write(code_block)
+                temp_file_path = tmp_file.name
+
+            result = subprocess.run([sys.executable, temp_file_path], capture_output=True, text=True, check=False)
+
+            if result.returncode == 0:
+                print("Python code executed successfully, output:\n")
+                print(result.stdout)
+                
+                best_obj = extract_best_objective(result.stdout)
+                if best_obj is not None:
+                    print(f"\nOptimal solution value (Best objective): {best_obj}")
+                else:
+                    print("\nOptimal solution value not found")
+                return True, str(best_obj)
+            else:
+                print(f"Python code execution error, error message:\n")
+                print(result.stderr)
+                return False, result.stderr
+
+        except Exception as e:
+            print(f"Error occurred while executing Python code block: {e}")
+            return False, str(e)
+        finally:
+            if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+        print("-" * 30)
+
+    return False, "No valid code blocks executed"
+
+def eval_model_result(success, result, ground_truth, err_range=0.1):
+    pass_flag = False
+    correct_flag = False
+    if success:
+        pass_flag = True
+        if is_number_string(str(result)) and ground_truth is not None:
+            result_num = convert_to_number(str(result))
+            ground_truth_num = convert_to_number(str(ground_truth))
+            if abs(result_num - ground_truth_num) < err_range:
+                correct_flag = True
+        elif result == 'None': # no available solution
+            if ground_truth is None or ground_truth == 'None':
+                correct_flag = True
+    return pass_flag, correct_flag 
+
 
 def query_llm(messages, model_name="gpt-4", temperature=0.2):
     """
@@ -129,7 +254,7 @@ def query_llm(messages, model_name="gpt-4", temperature=0.2):
     # Check if model is gemini:
     elif model_name.lower().startswith('gemini'):
         gemini_messages = []
-            
+        gemini_client = genai.GenerativeModel(model_name)
         for message in messages:
             if message["role"] == "system":
                 # Gemini doesn't have explicit system role, prepend to first user message
@@ -252,7 +377,6 @@ def or_llm_agent(user_question, model_name="gpt-4", max_attempts=3):
     math_model = query_llm(messages, model_name)
     print("[Mathematical Model]:\n", math_model)
 
-
     
     # 2. Validate mathematical model - MATH MODEL
     messages.append(
@@ -355,7 +479,7 @@ def or_llm_agent(user_question, model_name="gpt-4", max_attempts=3):
             )
             is_solve_success, result, messages = generate_or_code_solver(messages, model_name, max_attempts=2)
 
-
+    return is_solve_success, result
 def gpt_code_agent_simple(user_question, model_name="gpt-4", max_attempts=3):
     """
     Request Gurobi code solution from LLM and execute it, attempt to fix if it fails.
@@ -395,62 +519,3 @@ def gpt_code_agent_simple(user_question, model_name="gpt-4", max_attempts=3):
     print(f'Stage result: {is_solve_success}, {result}')
     
     return is_solve_success, result
-
-def parse_args():
-    """
-    Parse command line arguments.
-    
-    Returns:
-        argparse.Namespace: The parsed arguments
-    """
-    parser = argparse.ArgumentParser(description='Run optimization problem solving with LLMs')
-    parser.add_argument('--agent', action='store_true', 
-                        help='Use the agent. If not specified, directly use the model to solve the problem')
-    parser.add_argument('--model', type=str, default='gpt-4',
-                        help='Model name to use for LLM queries. Use "claude-..." for Claude models or "ollama:..." for Ollama models.')
-    parser.add_argument('--data_path', type=str, default='data/datasets/dataset_combined_result.json',
-                        help='Path to the dataset JSON file')
-    return parser.parse_args()
-
-if __name__ == "__main__":
-    args = parse_args()
-    
-    with open(args.data_path, 'r') as f:
-        dataset = json.load(f)
-    #print(dataset['0'])
-
-    model_name = args.model
-
-    pass_count = 0
-    correct_count = 0
-    error_datas = []
-    for i, d in dataset.items():
-        print(f"=============== num {i} ==================")
-        user_question, answer = d['question'], d['answer']
-        print(user_question)
-        print('-------------')
-        
-        if args.agent:
-            is_solve_success, llm_result = or_llm_agent(user_question, model_name)
-        else:
-            is_solve_success, llm_result = gpt_code_agent_simple(user_question, model_name)
-            
-        if is_solve_success:
-            print(f"Successfully executed code, optimal solution value: {llm_result}")
-        else:
-            print("Failed to execute code.")
-        print('------------------')
-        pass_flag, correct_flag = eval_model_result(is_solve_success, llm_result, answer)
-
-        pass_count += 1 if pass_flag else 0
-        correct_count += 1 if correct_flag else 0
-
-        if not pass_flag or not correct_flag:
-            error_datas.append(i)
-
-        print(f'solve: {is_solve_success}, llm: {llm_result}, ground truth: {answer}')
-        print(f'[Final] run pass: {pass_flag}, solve correct: {correct_flag}')
-        print(' ')
-            
-    print(f'[Total {len(dataset)}] run pass: {pass_count}, solve correct: {correct_count}')
-    print(f'[Total fails {len(error_datas)}] error datas: {error_datas}')
